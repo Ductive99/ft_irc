@@ -6,7 +6,7 @@
 /*   By: marwan <marwan@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/22 17:20:44 by marwan            #+#    #+#             */
-/*   Updated: 2026/02/22 23:48:25 by marwan           ###   ########.fr       */
+/*   Updated: 2026/02/24 21:29:03 by marwan           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,83 @@
 
 Server::Server(char *port, char* password) : _port(atoi(port)),  _password(password)
 {}
+
+Server::~Server(){}
+
+
+void Server::send_channel_msg(int fd, std::string channelName, std::string msg)
+{
+    if (_channels.find(channelName) == _channels.end())
+        std::cout << "Channel name not found!\n";
+    else
+        _channels[channelName].broadcast(fd, msg);
+}
+
+void Server::join_channel(int fd, std::string name)
+{
+    if (_channels.find(name) == _channels.end())
+        _channels[name] = Channel(name);
+    _channels[name].addClient(&_clients[fd]);
+    std::cout << "Client " << fd << " joined channel : " << name << std::endl;
+}
+
+void Server::parseCommand(int fd, std::string str)
+{
+    std::stringstream ss(str);
+    std::string token;
+    ss >> token;
+    if (token == "PASS")
+    {
+        std::cout << "PASS command\n";
+        std::string password;
+        ss >> password;
+        if (password == _password)
+        {
+            _clients[fd].set_pass(true);
+            std::cout << "Password : OK\n";
+        }
+        else std::cout <<"Password : Wrong\n";
+            
+    }
+    else if (token == "NICK")
+    {
+        std::cout << "NICK command\n";
+        std::string nickname;
+        ss >> nickname;
+        _clients[fd].set_nickname(nickname);
+        _clients[fd].set_nickOK(true);
+        std::cout << "Nickname set : " << nickname << std::endl;
+    }
+    else if (token == "USER")
+    {
+        std::cout << "USER command\n";
+        std::string username;
+        ss >> username;
+        _clients[fd].set_user(username);
+        _clients[fd].set_userOK(true);
+    }
+    else if (token=="JOIN")
+    {
+        std::string channelName;
+        ss >> channelName;
+        join_channel(fd, channelName);
+    }
+    else if (token == "PRIVMSG")
+    {
+        std::string target;
+        ss >> target;
+        std::string msg;
+        getline(ss, msg);
+        send_channel_msg(fd, target, msg);
+        std::cout << "PRIVMSG command\n";
+        
+    }
+    else std::cout << "Unknow command\n";
+    if (_clients[fd].is_Registered())
+    {
+        std::cout << "Client fully registered!\n";
+    }
+}
 
 void Server::acceptClient()
 {
@@ -23,7 +100,8 @@ void Server::acceptClient()
     newClient.fd = client_fd;
     newClient.events = POLLIN;
     newClient.revents = 0;
-    _fds.push_back(newClient);
+    _fds.push_back(newClient); 
+    _clients[client_fd] = Client(client_fd);
     std::cout << "New client connected! fd : " << client_fd << std::endl;
 }
 
@@ -34,12 +112,13 @@ void Server::receiveMessage(int i)
     int bytes = recv(_fds[i].fd,buffer,sizeof(buffer) -1, 0);
     if (bytes <= 0)//-1 cest erreur nan ? 
     {
-        std::cout << "Client disconnected\n";
+        std::cout << "Client " << _fds[i].fd <<" disconnected\n";
         close(_fds[i].fd);
         _fds.erase(_fds.begin()+i);
         return;
     }
     buffer[bytes]='\0';
+    parseCommand(_fds[i].fd, buffer);
     std::cout << "Message : " << buffer << std::endl;
     
 }

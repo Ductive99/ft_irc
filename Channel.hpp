@@ -1,31 +1,37 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main.cpp                                           :+:      :+:    :+:   */
+/*   Channel.hpp                                        :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: marwan <marwan@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/02/22 17:16:22 by marwan            #+#    #+#             */
-/*   Updated: 2026/02/24 20:27:52 by marwan           ###   ########.fr       */
+/*   Created: 2026/02/24 20:17:58 by marwan            #+#    #+#             */
+/*   Updated: 2026/02/24 21:21:07 by marwan           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
+#ifndef CHANNEL_HPP
+#define CHANNEL_HPP
+
 #include <iostream>
-#include "Server.hpp"
+#include <map>
 #include "Client.hpp"
+#include <sys/socket.h>
 
-
-int main(int argc, char **argv)
+class Channel
 {
-    if(argc!=3)return (std::cerr<<"Usage: ./irc port password\n",1);
-    try
-    {
-        Server server(argv[1], argv[2]);
-        server.start();
-    }
-    catch(const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-    }
-    
-}
+    private:
+        std::string _name;
+        std::map<int , Client*> _channelClients;
+        
+    public:
+        Channel();
+        Channel(std::string name);
+        void addClient(Client *client);
+        void removeClient(int fd);
+        std::string get_name()const;
+        void broadcast(int sender_fd, const std::string &msg);
+};
+
+
+#endif
