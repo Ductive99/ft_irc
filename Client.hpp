@@ -6,7 +6,7 @@
 /*   By: marwan <marwan@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/23 17:12:11 by marwan            #+#    #+#             */
-/*   Updated: 2026/02/24 21:16:33 by marwan           ###   ########.fr       */
+/*   Updated: 2026/02/27 21:32:42 by marwan           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,7 +21,7 @@ class Client
         int _fd;
         std::string _nickname;
         std::string _username;
-        bool _authentificated;
+        bool _registered;
         bool _pass_ok;
         bool _nick_ok;
         bool _user_ok;
@@ -37,9 +37,10 @@ class Client
         void set_pass(bool b);
         void set_nickOK(bool b);
         void set_userOK(bool b);
-        void authentificate();
-        bool is_authentificate() const;
-        bool is_Registered()const;
+        void Register();
+        bool get_registered() const;
+        bool is_registerable()const;
+        void set_registered(bool b);
 };
 
 

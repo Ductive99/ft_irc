@@ -6,7 +6,7 @@
 /*   By: marwan <marwan@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/22 17:20:44 by marwan            #+#    #+#             */
-/*   Updated: 2026/02/26 01:15:17 by marwan           ###   ########.fr       */
+/*   Updated: 2026/02/27 21:34:54 by marwan           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,11 +17,32 @@ Server::Server(char *port, char* password) : _port(atoi(port)),  _password(passw
 
 Server::~Server(){}
 
+void Server::send_user_msg(int fd, std::string target,std::string msg)
+{
+    (void)fd;
+    for(std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); it++)
+    {
+        if (it->second.get_nickname()==target)
+        {
+            send(it->second.get_fd(), msg.c_str(), msg.size(), 0);
+            return ;
+        }
+    }
+    std::cout << "User not found!\n";
+}
+
 void Server::removeClientServ(int fd)
 {
+    removeClientPoll(fd);
     _clients.erase(fd);
     for(std::map<std::string, Channel>::iterator it = _channels.begin();it != _channels.end();it++)
         it->second.removeClient(fd);
+}
+
+void Server::removeClientPoll(int fd)
+{
+    for(std::vector<pollfd>::iterator it = _fds.begin(); it != _fds.end();it++)
+        if (it->fd == fd) _fds.erase(it);
 }
 
 bool Server::checkNickname(const std::string &nickname) //je crois quen fait un vector de clients suffit car on peut avoir le fd dun client ! 
@@ -64,11 +85,20 @@ void Server::join_channel(int fd, std::string name)
     std::cout << "Client " << fd << " joined channel : " << name << std::endl;
 }
 
+
 void Server::parseCommand(int fd, std::string str)
 {
     std::stringstream ss(str);
     std::string token;
     ss >> token;
+    if (!_clients[fd].is_registerable())
+    {
+        if (token != "PASS" && token != "USER" &&  token != "NICK" &&  token != "QUIT")
+        {
+            std::cout << "Client " << _clients[fd].get_fd() << "can't use " << token << ", he need to register first!\n";
+            return;
+        }
+    }
     if (token == "PASS")
     {
         std::cout << "PASS command\n";
@@ -78,6 +108,11 @@ void Server::parseCommand(int fd, std::string str)
         {
             _clients[fd].set_pass(true);
             std::cout << "Password : OK\n";
+            if (_clients[fd].is_registerable() && !_clients[fd].get_registered())
+            {
+                _clients[fd].set_registered(true);
+                std::cout << "Client is now registered!\n";
+            }
         }
         else std::cout <<"Password : Wrong\n";
             
@@ -95,48 +130,56 @@ void Server::parseCommand(int fd, std::string str)
         _clients[fd].set_nickname(nickname);
         _clients[fd].set_nickOK(true);
         std::cout << "Nickname set : " << nickname << std::endl;
+        if (_clients[fd].is_registerable() && !_clients[fd].get_registered())
+        {
+            _clients[fd].set_registered(true);
+            std::cout << "Client is now registered!\n";
+        }
     }
     else if (token == "USER")
     {
         std::cout << "USER command\n";
         std::string username;
         ss >> username;
-        _clients[fd].set_user(username);
+        _clients[fd].set_user(username); //verifier peut etre si cest pas deja pris ! 
         _clients[fd].set_userOK(true);
+        if (_clients[fd].is_registerable() && !_clients[fd].get_registered())
+        {
+            _clients[fd].set_registered(true);
+            std::cout << "Client is now registered!\n";
+        }
     }
     else if (token=="JOIN")
     {
-        if(!_clients[fd].is_Registered())
-        {
-            std::cout << "Client " << fd << " not registered!\n";
-            return;
-        }
         std::string channelName;
         ss >> channelName;
         join_channel(fd, channelName);
     }
     else if (token == "PRIVMSG")
     {
-        if(!_clients[fd].is_Registered())
-        {
-            std::cout << "Client " << fd << " not registered!\n";
-            return;
-        }
         std::string target;
         ss >> target;
-        std::string msg;
-        getline(ss, msg);
-        send_channel_msg(fd, target, msg);
-        std::cout << "PRIVMSG command\n";
+        if (target[0]=='#')
+        {
+            std::cout <<"direction channel";
+            std::string msg;
+            getline(ss, msg);
+            send_channel_msg(fd, target, msg);
+            std::cout << "PRIVMSG command\n";
+
+        }
+        else
+        {
+            std::cout<<"direction un user je crois\n";
+            std::string msg;
+            getline(ss, msg);
+            send_user_msg(fd, target, msg);
+            std::cout << "PRIVMSG command\n";
+        }
         
     }
     else if (token == "PART")
     {
-        if(!_clients[fd].is_Registered())
-        {
-            std::cout << "Client " << fd << " not registered!\n";
-            return;
-        }
         std::string channelName;
         ss >> channelName;
         part_channel(fd, channelName);
@@ -147,10 +190,6 @@ void Server::parseCommand(int fd, std::string str)
         std::cout << "Client " << fd << " have been remove from all channels and his fd has been erase from the server.\n";
     }
     else std::cout << "Unknow command\n";
-    if (_clients[fd].is_Registered())
-    {
-        std::cout << "Client fully registered!\n";
-    }
 }
 
 void Server::acceptClient()
