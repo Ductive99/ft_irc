@@ -3,16 +3,17 @@
 /*                                                        :::      ::::::::   */
 /*   main.cpp                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: marwan <marwan@student.42.fr>              +#+  +:+       +#+        */
+/*   By: braugust <braugust@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/22 17:16:22 by marwan            #+#    #+#             */
-/*   Updated: 2026/02/27 21:34:51 by marwan           ###   ########.fr       */
+/*   Updated: 2026/03/10 10:53:48 by braugust         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <iostream>
 #include "Server.hpp"
 #include "Client.hpp"
+#include "Channel.hpp"
 
 
 int main(int argc, char **argv)

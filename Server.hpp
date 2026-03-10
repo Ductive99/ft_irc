@@ -6,7 +6,7 @@
 /*   By: braugust <braugust@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/22 17:17:48 by marwan            #+#    #+#             */
-/*   Updated: 2026/03/09 12:46:34 by braugust         ###   ########.fr       */
+/*   Updated: 2026/03/10 11:55:33 by braugust         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 #include <poll.h>
 #include <vector>
 #include <unistd.h>
+#include <csignal>
 #include <cstdlib>
 #include <map>
 #include "Client.hpp"
@@ -28,16 +29,16 @@
 class Server
 {
     private:
-        int _port;
-        std::string _password;
-        int _server_fd;
-        std::vector<pollfd>_fds;
-        std::map<int,Client> _clients;
-        std::map<std::string, Channel> _channels;
+    int _port;
+    std::string _password;
+    int _server_fd;
+    std::vector<pollfd>_fds;
+    std::map<int,Client> _clients;
+    std::map<std::string, Channel> _channels;
     public:
-        Server(char *port, char* password);
-        ~Server();
-        void start();
+    Server(char *port, char* password);
+    ~Server();
+    void start();
         void acceptClient();
         void receiveMessage(int i);
         void parseCommand(int fd, std::string str);
@@ -50,6 +51,9 @@ class Server
         bool checkUsername(const std::string &username); //b
         void send_user_msg(int fd, std::string target,std::string msg);
         void sendReply(int fd, const std::string &reply); //b
+        int findClientByNick(const std::string &nick); //b
+        static void signalHandler(int signal);
+        static bool _running;
 };
 
 #endif

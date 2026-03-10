@@ -6,7 +6,7 @@
 /*   By: braugust <braugust@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/22 17:20:44 by marwan            #+#    #+#             */
-/*   Updated: 2026/03/09 13:08:53 by braugust         ###   ########.fr       */
+/*   Updated: 2026/03/10 13:06:02 by braugust         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,15 +34,41 @@ void Server::send_user_msg(int fd, std::string target,std::string msg)
 void Server::removeClientServ(int fd)
 {
     removeClientPoll(fd);
-    _clients.erase(fd);
     for(std::map<std::string, Channel>::iterator it = _channels.begin();it != _channels.end();it++)
         it->second.removeClient(fd);
+    _clients.erase(fd);
+}
+
+bool Server::_running = true;
+
+void Server::signalHandler(int signal)
+{
+    (void)signal;
+    std::cout << "\nServer shutting down...\n";
+    _running = false;
 }
 
 void Server::removeClientPoll(int fd)
 {
-    for(std::vector<pollfd>::iterator it = _fds.begin(); it != _fds.end();it++)
-        if (it->fd == fd) _fds.erase(it);
+    for (std::vector<pollfd>::iterator it = _fds.begin(); it != _fds.end(); it++)
+    {
+        if (it->fd == fd)
+        {
+            _fds.erase(it);
+            return;
+        }
+    }
+}
+
+int Server::findClientByNick(const std::string &nick)
+{
+    for (std::map<int, Client>::iterator it = _clients.begin();
+         it != _clients.end(); it++)
+    {
+        if (it->second.get_nickname() == nick)
+            return it->first;
+    }
+    return -1;
 }
 
 bool Server::checkNickname(const std::string &nickname) //je crois quen fait un vector de clients suffit car on peut avoir le fd dun client ! 
@@ -57,11 +83,11 @@ bool Server::checkNickname(const std::string &nickname) //je crois quen fait un 
 
 bool Server::checkUsername(const std::string &username)
 {
-    std::cout << "Checking username: '" << username << "'\n";  // ← ajoute ça
+    std::cout << "Checking username: '" << username << "'\n";
     for (std::map<int, Client>::iterator it = _clients.begin();
          it != _clients.end(); it++)
     {
-        std::cout << "Comparing with: '" << it->second.get_username() << "'\n";  // ← et ça
+        std::cout << "Comparing with: '" << it->second.get_username() << "'\n";
         if (it->second.get_username() == username)
             return false;
     }
@@ -92,10 +118,18 @@ void Server::send_channel_msg(int fd, std::string channelName, std::string msg)
 
 void Server::join_channel(int fd, std::string name)
 {
-    if (_channels.find(name) == _channels.end())
+    bool isNew = (_channels.find(name) == _channels.end());
+
+    if (isNew)
         _channels[name] = Channel(name);
-    _channels[name].addClient(&_clients[fd]);
-    std::cout << "Client " << fd << " joined channel : " << name << std::endl;
+
+    Client *client = &_clients[fd];
+    _channels[name].addClient(client);
+    if (isNew)
+        _channels[name].addOperator(fd);
+    std::cout << "Client " << fd << " joined channel : " << name;
+    if (isNew) std::cout << " (created, operator)";
+    std::cout << std::endl;
 }
 
 
@@ -190,45 +224,196 @@ void Server::parseCommand(int fd, std::string str)
     {
         std::string channelName;
         ss >> channelName;
+        if (channelName.empty())
+        {
+            sendReply(fd, ":ircserv 461 " + _clients[fd].get_nickname() + " JOIN :Not enough parameters");
+            return;
+        }
+        if (channelName[0] != '#')
+        {
+            sendReply(fd, ":ircserv 403 " + _clients[fd].get_nickname() + " " + channelName + " :No such channel");
+            return;
+        }
         join_channel(fd, channelName);
+        std::string nick = _clients[fd].get_nickname();
+        std::string joinMsg = ":" + nick + " @ircserv JOIN " + channelName + "\r\n";
+        _channels[channelName].broadcast(-1, joinMsg);
+        std::string topic = _channels[channelName].getTopic();
+        if (topic.empty())
+            sendReply(fd, ":ircserv 331 " + nick + " " + channelName + " :No topic is set");
+        else
+            sendReply(fd, ":ircserv 332 " + nick + " " + channelName + " :" + topic);
+        sendReply(fd, ":ircserv 353 " + nick + " = " + channelName + " :" + _channels[channelName].getClientList());
+        sendReply(fd, ":ircserv 366 " + nick + " " + channelName + " :End of /NAMES list");
     }
     else if (token == "PRIVMSG")
     {
         std::string target;
         ss >> target;
-        if (target[0]=='#')
-        {
-            std::cout <<"direction channel";
-            std::string msg;
-            getline(ss, msg);
-            send_channel_msg(fd, target, msg);
-            std::cout << "PRIVMSG command\n";
 
+        if (target.empty())
+        {
+            sendReply(fd, ":ircserv 411 " + _clients[fd].get_nickname() + " :No recipient given");
+            return;
+        }
+        std::string msg;
+        getline(ss, msg);
+        if (msg.empty())
+        {
+            sendReply(fd, ":ircserv 412 " + _clients[fd].get_nickname() + " :No text to send");
+            return;
+        }
+        std::string nick = _clients[fd].get_nickname();
+        std::string fullMsg = ":" + nick + " @ircserv PRIVMSG " + target + msg + "\r\n";    
+        if (target[0] == '#')
+        {
+            if (_channels.find(target) == _channels.end())
+            {
+                sendReply(fd, ":ircserv 403 " + nick + " " + target + " :No such channel");
+                return;
+            }
+            send_channel_msg(fd, target, fullMsg);
         }
         else
         {
-            std::cout<<"direction un user je crois\n";
-            std::string msg;
-            getline(ss, msg);
-            send_user_msg(fd, target, msg);
-            std::cout << "PRIVMSG command\n";
+            if (findClientByNick(target) == -1)
+            {
+                sendReply(fd, ":ircserv 401 " + nick + " " + target + " :No such nick");
+                return;
+            }
+            send_user_msg(fd, target, fullMsg);
         }
-        
     }
     else if (token == "PART")
     {
         std::string channelName;
         ss >> channelName;
-        part_channel(fd, channelName);
+        if (channelName.empty())
+        {
+            sendReply(fd, ":ircserv 461 " + _clients[fd].get_nickname() + " PART :Not enough parameters");
+            return;
+        }
+        if (_channels.find(channelName) == _channels.end())
+        {
+            sendReply(fd, ":ircserv 403 " + _clients[fd].get_nickname() + " " + channelName + " :No such channel");
+            return;
+        }
+        std::string nick = _clients[fd].get_nickname();
+        std::string partMsg = ":" + nick + "@ircserv PART " + channelName + "\r\n";
+        _channels[channelName].broadcast(-1, partMsg);
+        _channels[channelName].removeClient(fd);
     }
     else if (token == "QUIT")
     {
+        std::string nick = _clients[fd].get_nickname();
+
+        std::string quitMsg = ":" + nick + " @ircserv QUIT" + "\r\n";
+        for (std::map<std::string, Channel>::iterator it = _channels.begin(); it != _channels.end(); it++)
+        {
+            it->second.broadcast(fd, quitMsg);
+        }
+        sendReply(fd, "ERROR :Closing connection");
+        close(fd);
         removeClientServ(fd);
-        std::cout << "Client " << fd << " have been remove from all channels and his fd has been erase from the server.\n";
+        std::cout << "Client " << nick << " disconnected\n";
     }
-    else if (token == "KICK");
-    else if (token == "INVITE");
-    else if (token == "TOPIC");
+    else if (token == "KICK")
+    {
+        std::string channelName, target;
+        ss >> channelName >> target;
+        std::string nick = _clients[fd].get_nickname();
+        if (_channels.find(channelName) == _channels.end())
+        {
+            sendReply(fd, ":ircserv 403 " + nick + " " + channelName + " :No such channel");
+            return;
+        }
+        if (!_channels[channelName].isOperator(fd))
+        {
+            sendReply(fd, ":ircserv 482 " + nick + " " + channelName + " :You're not channel operator");
+            return;
+        }
+        int targetFd = findClientByNick(target);
+        if (targetFd == -1)
+        {
+            sendReply(fd, ":ircserv 401 " + nick + " " + target + " :No such nick");
+            return;
+        }
+        if (!_channels[channelName].hasClient(targetFd))
+        {
+            sendReply(fd, ":ircserv 441 " + nick + " " + target + " " + channelName + " :They aren't on that channel");
+            return;
+        }
+        std::string kickMsg = ":" + nick + "@ircserv KICK "+ channelName + " " + target + "\r\n";
+        _channels[channelName].broadcast(-1, kickMsg);
+        _channels[channelName].removeClient(targetFd);
+        _channels[channelName].removeOperator(targetFd);
+    }
+    else if (token == "INVITE")
+    {
+        std::string target, channelName;
+        ss >> target >> channelName;
+        std::string nick = _clients[fd].get_nickname();
+        if (_channels.find(channelName) == _channels.end())
+        {
+            sendReply(fd, ":ircserv 403 " + nick + " " + channelName + " :No such channel");
+            return;
+        }
+        if (!_channels[channelName].isOperator(fd))
+        {
+            sendReply(fd, ":ircserv 482 " + nick + " " + channelName + " :You're not channel operator");
+            return;
+        }
+        int targetFd = findClientByNick(target);
+        if (targetFd == -1)
+        {
+            sendReply(fd, ":ircserv 401 " + nick + " " + target + " :No such nick");
+            return;
+        }
+        if (_channels[channelName].hasClient(targetFd))
+        {
+            sendReply(fd, ":ircserv 443 " + nick + " " + target + " " + channelName + " :is already on channel");
+            return;
+        }
+        _channels[channelName].addInvited(targetFd);
+        std::string inviteMsg = ":" + nick + "@ircserv INVITE " + target + " :" + channelName + "\r\n";
+        // sendReply(targetFd, inviteMsg);
+        sendReply(fd, ":ircserv 341 " + nick + " " + target + " " + channelName);
+    }
+    else if (token == "TOPIC")
+    {
+        std::string channelName, newTopic;
+        ss >> channelName;
+        std::string nick = _clients[fd].get_nickname();
+        if (_channels.find(channelName) == _channels.end())
+        {
+            sendReply(fd, ":ircserv 403 " + nick + " " + channelName + " :No such channel");
+            return;
+        }
+        if (!_channels[channelName].hasClient(fd))
+        {
+            sendReply(fd, ":ircserv 442 " + nick + " " + channelName + " :You're not on that channel");
+            return;
+        }
+        getline(ss, newTopic);
+        if (newTopic.empty())
+        {
+            std::string topic = _channels[channelName].getTopic();
+            if (topic.empty())
+                sendReply(fd, ":ircserv 331 " + nick + " " + channelName + " :No topic is set");
+            else
+                sendReply(fd, ":ircserv 332 " + nick + " " + channelName + " :" + topic);
+            return;
+        }
+        if (newTopic[0] == ' ') 
+            newTopic = newTopic.substr(1);
+        if (!newTopic.empty() && newTopic[0] == ':')
+            newTopic = newTopic.substr(1);
+
+        _channels[channelName].setTopic(newTopic);
+        std::string topicMsg = ":" + nick + "@ircserv TOPIC "
+                            + channelName + " :" + newTopic + "\r\n";
+        _channels[channelName].broadcast(-1, topicMsg);
+    }
     else if (token == "MODE");
     else std::cout << "Unknow command\n";
 }
@@ -273,37 +458,43 @@ void Server::sendReply(int fd, const std::string &reply)
     std::string msg = reply + "\r\n";
     send(fd, msg.c_str(), msg.size(), 0);
 }
-
 void Server::start()
 {
-    _server_fd = socket(AF_INET, SOCK_STREAM,0);
-    if (_server_fd<0)throw std::runtime_error("socket failed\n");
+    _server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (_server_fd < 0) throw std::runtime_error("socket failed\n");
     sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(_port);
     addr.sin_addr.s_addr = INADDR_ANY;
-    if (bind(_server_fd,(const sockaddr *)&addr, sizeof(addr)) < 0)
+    if (bind(_server_fd, (const sockaddr *)&addr, sizeof(addr)) < 0)
         throw std::runtime_error("Bind error\n");
-    if(listen(_server_fd, SOMAXCONN) < 0)
+    if (listen(_server_fd, SOMAXCONN) < 0)
         throw std::runtime_error("Listen error\n");
     pollfd server_poll;
     server_poll.fd = _server_fd;
     server_poll.events = POLLIN;
-    server_poll.revents =0;
+    server_poll.revents = 0;
     _fds.push_back(server_poll);
+    signal(SIGINT, Server::signalHandler);
+    signal(SIGQUIT, Server::signalHandler);
     std::cout << "Server listening on port " << _port << std::endl;
-    while(1)
+    while (_running)
     {
-        if(poll(&_fds[0], _fds.size(), -1) < 0)
-            throw std::runtime_error("poll error\n");
-        for(size_t i = 0; i< _fds.size();i++)
+        if (poll(&_fds[0], _fds.size(), -1) < 0)  // ← un seul appel
         {
-            if(_fds[i].revents & POLLIN)
+            if (!_running) break;  // signal reçu → sortie propre
+            throw std::runtime_error("poll error\n");
+        }
+        for (size_t i = 0; i < _fds.size(); i++)
+        {
+            if (_fds[i].revents & POLLIN)
             {
-                if(_fds[i].fd == _server_fd)
+                if (_fds[i].fd == _server_fd)
                     acceptClient();
-                else receiveMessage(i);
+                else
+                    receiveMessage(i);
             }
         }
     }
+    close(_server_fd);
 }
