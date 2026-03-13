@@ -3,19 +3,19 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: braugust <braugust@student.42.fr>          +#+  +:+       +#+        */
+/*   By: esouhail <esouhail@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/22 17:20:44 by marwan            #+#    #+#             */
-/*   Updated: 2026/03/10 19:37:01 by braugust         ###   ########.fr       */
+/*   Updated: 2026/03/14 00:20:18 by esouhail         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Server.hpp"
 
-Server::Server(char *port, char* password) : _port(atoi(port)),  _password(password)
-{}
+Server::Server(char *port, char* password)
+    : _port(atoi(port)),  _password(password) {}
 
-Server::~Server(){}
+Server::~Server() {}
 
 void Server::send_user_msg(int fd, std::string target,std::string msg)
 {
