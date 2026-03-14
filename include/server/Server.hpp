@@ -6,7 +6,7 @@
 /*   By: esouhail <esouhail@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/22 17:17:48 by marwan            #+#    #+#             */
-/*   Updated: 2026/03/14 18:43:21 by esouhail         ###   ########.fr       */
+/*   Updated: 2026/03/14 22:08:50 by esouhail         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,9 @@
 #include <string>
 #include <vector>
 #include <poll.h>
+#include <cerrno>
+#include <cstdlib>
+#include <stdexcept>
 
 #include "Client.hpp"
 #include "Channel.hpp"
