@@ -6,7 +6,7 @@
 /*   By: esouhail <esouhail@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/22 17:17:48 by marwan            #+#    #+#             */
-/*   Updated: 2026/03/14 23:30:58 by esouhail         ###   ########.fr       */
+/*   Updated: 2026/03/15 00:05:34 by esouhail         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -82,6 +82,8 @@ class Server {
     void handleInvite(int fd, const Message &msg);
     void handleTopic(int fd, const Message &msg);
     void handleMode(int fd, const Message &msg);
+    void handlePing(int fd, const Message &msg);
+    void handleCap(int fd, const Message &msg);
 
     static void signalHandler(int signal);
 
